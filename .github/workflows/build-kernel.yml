@@ -29,6 +29,9 @@ jobs:
             bc bison build-essential clang-14 flex gcc-aarch64-linux-gnu \
             gcc-arm-linux-gnueabi git libelf-dev libncurses-dev libssl-dev \
             lld-14 llvm-14 lz4 python3 rsync zstd
+          # Linux 5.10 Kconfig probes the unsuffixed linker name.
+          sudo ln -sf "$(command -v ld.lld-14)" /usr/local/bin/ld.lld
+          ld.lld --version
 
       - name: Fetch the requested kernel source branch
         run: |
