@@ -1,0 +1,111 @@
+name: Build Droidspaces GKI kernel
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: droidspaces-gki-build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build arm64 GKI 5.10.260
+    runs-on: ubuntu-22.04
+    timeout-minutes: 360
+
+    steps:
+      - name: Check out build configuration
+        uses: actions/checkout@v4
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            bc bison build-essential clang-14 flex gcc-aarch64-linux-gnu \
+            gcc-arm-linux-gnueabi git libelf-dev libncurses-dev libssl-dev \
+            lld-14 llvm-14 lz4 python3 rsync zstd
+
+      - name: Fetch the requested kernel source branch
+        run: |
+          git clone --depth 1 --branch upstream-test \
+            https://github.com/V1NAY007/android_kernel_oplus_mt6895.git kernel
+          git -C kernel rev-parse HEAD | tee kernel-source-commit.txt
+
+      - name: Apply and validate GKI kABI patches
+        working-directory: kernel
+        run: |
+          patch --batch --forward --dry-run -p1 < ../patches/001-fix-sysvipc-kabi.patch
+          patch --batch --forward -p1 < ../patches/001-fix-sysvipc-kabi.patch
+          patch --batch --forward --dry-run -p1 < ../patches/002-posix-mqueue-kabi-5.10.patch
+          patch --batch --forward -p1 < ../patches/002-posix-mqueue-kabi-5.10.patch
+
+      - name: Configure Droidspaces requirements
+        working-directory: kernel
+        env:
+          ARCH: arm64
+          LLVM: -14
+          LLVM_IAS: "1"
+          CROSS_COMPILE: aarch64-linux-gnu-
+          CROSS_COMPILE_COMPAT: arm-linux-gnueabi-
+        run: |
+          make O=out gki_defconfig
+          for option in SYSVIPC POSIX_MQUEUE IPC_NS PID_NS DEVTMPFS NETFILTER_XT_MATCH_ADDRTYPE; do
+            scripts/config --file out/.config --enable "$option"
+          done
+          # These two options change GKI structure layouts and are intentionally excluded.
+          scripts/config --file out/.config --disable CFS_BANDWIDTH --disable CGROUP_PIDS
+          make O=out olddefconfig
+
+          for option in SYSVIPC POSIX_MQUEUE IPC_NS PID_NS DEVTMPFS NETFILTER_XT_MATCH_ADDRTYPE MODVERSIONS; do
+            grep -qx "CONFIG_${option}=y" out/.config || {
+              echo "Required config missing after olddefconfig: CONFIG_${option}"
+              exit 1
+            }
+          done
+
+          if grep -Eq '^CONFIG_(CFS_BANDWIDTH|CGROUP_PIDS)=y$' out/.config; then
+            echo "Refusing to build with ABI-breaking cgroup options enabled"
+            exit 1
+          fi
+
+      - name: Build compressed arm64 kernel image
+        working-directory: kernel
+        env:
+          ARCH: arm64
+          LLVM: -14
+          LLVM_IAS: "1"
+          CROSS_COMPILE: aarch64-linux-gnu-
+          CROSS_COMPILE_COMPAT: arm-linux-gnueabi-
+          KBUILD_BUILD_USER: github-actions
+          KBUILD_BUILD_HOST: ubuntu-runner
+        run: |
+          make O=out -j2 Image.lz4
+          mkdir -p ../artifacts
+          cp out/arch/arm64/boot/Image.lz4 ../artifacts/
+          cp out/.config ../artifacts/kernel.config
+          cp out/System.map ../artifacts/
+          cp ../kernel-source-commit.txt ../artifacts/
+          {
+            echo "Kernel source: V1NAY007/android_kernel_oplus_mt6895"
+            echo "Source branch: upstream-test"
+            echo "Architecture: arm64"
+            echo "Kernel release: $(make O=out -s kernelrelease)"
+            echo "Build commit: $GITHUB_SHA"
+            echo "Enabled Droidspaces configs:"
+            grep -E '^CONFIG_(SYSVIPC|POSIX_MQUEUE|IPC_NS|PID_NS|DEVTMPFS|NETFILTER_XT_MATCH_ADDRTYPE|MODVERSIONS)=y$' out/.config
+            echo "ABI-sensitive resource-limit configs:"
+            grep -E '^CONFIG_(CFS_BANDWIDTH|CGROUP_PIDS)=y$' out/.config || true
+          } > ../artifacts/build-info.txt
+
+      - name: Upload kernel artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: droidspaces-mt6895-gki-5.10.260
+          path: artifacts/
+          if-no-files-found: error
+          retention-days: 14
