@@ -53,11 +53,13 @@ jobs:
           tree = json.load(open(sys.argv[1], encoding="utf-8"))
           if tree.get("truncated"):
               raise SystemExit("Git tree response was truncated")
-          prefix = "vendor/oplus/kernel/cpu/"
+          prefixes = ("vendor/oplus/kernel/cpu/", "vendor/oplus/kernel/synchronize/")
           paths = [item["path"] for item in tree["tree"]
-                   if item["type"] == "blob" and item["path"].startswith(prefix)]
-          if not paths or not any(path.endswith("/sched/Kconfig") for path in paths):
-              raise SystemExit("Oplus CPU subtree or sched/Kconfig is missing")
+                   if item["type"] == "blob" and item["path"].startswith(prefixes)]
+          required = ("vendor/oplus/kernel/cpu/sched/Kconfig",
+                      "vendor/oplus/kernel/synchronize/Kconfig")
+          if not all(path in paths for path in required):
+              raise SystemExit("Required Oplus CPU/locking Kconfig source is missing")
           with open(sys.argv[2], "w", encoding="utf-8") as out:
               out.write("\n".join(paths) + "\n")
           print(f"Fetching {len(paths)} Oplus CPU source files")
@@ -70,8 +72,11 @@ jobs:
           done < "$RUNNER_TEMP/cpu-files.txt"
           test -f "$GITHUB_WORKSPACE/vendor/oplus/kernel/cpu/sched/Kconfig"
           test -f "$GITHUB_WORKSPACE/kernel/kernel/oplus_cpu/sched/Kconfig"
+          test -f "$GITHUB_WORKSPACE/vendor/oplus/kernel/synchronize/Kconfig"
+          test -f "$GITHUB_WORKSPACE/kernel/kernel/locking/oplus_locking/Kconfig"
           test "$(readlink -f "$GITHUB_WORKSPACE/kernel/kernel/oplus_cpu")" = "$GITHUB_WORKSPACE/vendor/oplus/kernel/cpu"
-          echo "Oplus CPU Kconfig source tree is in place."
+          test "$(readlink -f "$GITHUB_WORKSPACE/kernel/kernel/locking/oplus_locking")" = "$GITHUB_WORKSPACE/vendor/oplus/kernel/synchronize"
+          echo "Oplus CPU and locking Kconfig source trees are in place."
 
       - name: Apply and validate GKI kABI patches
         working-directory: kernel
