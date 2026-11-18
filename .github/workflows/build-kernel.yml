@@ -44,9 +44,12 @@ jobs:
           git clone --depth 1 --filter=blob:none --sparse --branch upstream-test \
             https://github.com/V1NAY007/android_kernel_modules_oplus_mt6895.git modules
           git -C modules sparse-checkout set vendor/oplus/kernel/cpu
-          mkdir -p kernel/vendor/oplus/kernel
-          cp -a modules/vendor/oplus/kernel/cpu kernel/vendor/oplus/kernel/cpu
-          test -f kernel/vendor/oplus/kernel/cpu/sched/Kconfig
+          # kernel/oplus_cpu is a source-tree symlink to ../../vendor/oplus/kernel/cpu.
+          # Resolve that relative path from the kernel/ directory: $GITHUB_WORKSPACE/../../vendor.
+          mkdir -p "$GITHUB_WORKSPACE/../../vendor/oplus/kernel"
+          cp -a modules/vendor/oplus/kernel/cpu "$GITHUB_WORKSPACE/../../vendor/oplus/kernel/cpu"
+          test -f kernel/oplus_cpu/sched/Kconfig
+          readlink -f kernel/oplus_cpu
 
       - name: Apply and validate GKI kABI patches
         working-directory: kernel
