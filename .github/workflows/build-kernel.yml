@@ -60,7 +60,7 @@ jobs:
               raise SystemExit("Oplus CPU subtree or sched/Kconfig is missing")
           with open(sys.argv[2], "w", encoding="utf-8") as out:
               out.write("\n".join(paths) + "\n")
-          print(f"Fetching {len(paths)} Oplus CPU source files from {MODULES_COMMIT}")
+          print(f"Fetching {len(paths)} Oplus CPU source files")
           PY
           while IFS= read -r path; do
             mkdir -p "$GITHUB_WORKSPACE/$(dirname "$path")"
