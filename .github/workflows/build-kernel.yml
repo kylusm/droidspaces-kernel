@@ -43,10 +43,10 @@ jobs:
         run: |
           git clone --depth 1 --branch upstream-test \
             https://github.com/V1NAY007/android_kernel_modules_oplus_mt6895.git modules
-          # kernel/oplus_cpu points to ../../vendor/oplus/kernel/cpu relative to kernel/.
-          # That resolves to the sibling vendor/ directory beside the kernel/ source tree.
-          mkdir -p "$GITHUB_WORKSPACE/../vendor/oplus/kernel"
-          cp -a modules/vendor/oplus/kernel/cpu "$GITHUB_WORKSPACE/../vendor/oplus/kernel/cpu"
+          # kernel/kernel/oplus_cpu points to ../../vendor/oplus/kernel/cpu.
+          # From the kernel source root this resolves to $GITHUB_WORKSPACE/vendor.
+          mkdir -p "$GITHUB_WORKSPACE/vendor/oplus/kernel"
+          cp -a modules/vendor/oplus/kernel/cpu "$GITHUB_WORKSPACE/vendor/oplus/kernel/cpu"
           test -f kernel/oplus_cpu/sched/Kconfig
           readlink -f kernel/oplus_cpu
 
