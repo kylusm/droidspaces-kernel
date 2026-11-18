@@ -40,16 +40,38 @@ jobs:
           git -C kernel rev-parse HEAD | tee kernel-source-commit.txt
 
       - name: Fetch required Oplus CPU Kconfig sources
+        env:
+          MODULES_COMMIT: 90e5b2b12ec5767f9119d702979c7e5eeec6db53
         run: |
-          git clone --depth 1 --branch upstream-test \
-            https://github.com/V1NAY007/android_kernel_modules_oplus_mt6895.git modules
-          # kernel/oplus_cpu is relative to kernel/ and resolves to the parent of the workspace.
-          # Therefore the target is $GITHUB_WORKSPACE/../vendor/oplus/kernel/cpu.
-          mkdir -p "$GITHUB_WORKSPACE/../vendor/oplus/kernel"
-          cp -a modules/vendor/oplus/kernel/cpu "$GITHUB_WORKSPACE/../vendor/oplus/kernel/cpu"
-          test -f kernel/kernel/oplus_cpu/sched/Kconfig
-          readlink -f kernel/kernel/oplus_cpu
-          test "$(readlink -f kernel/kernel/oplus_cpu)" = "$GITHUB_WORKSPACE/vendor/oplus/kernel/cpu"
+          # The modules repository is large; fetch only the exact Oplus CPU subtree
+          # from the upstream-test branch commit instead of cloning the whole repository.
+          curl -fsSL \
+            "https://api.github.com/repos/V1NAY007/android_kernel_modules_oplus_mt6895/git/trees/$MODULES_COMMIT?recursive=1" \
+            -o "$RUNNER_TEMP/modules-tree.json"
+          python3 - "$RUNNER_TEMP/modules-tree.json" "$RUNNER_TEMP/cpu-files.txt" <<'PY'
+          import json, sys
+          tree = json.load(open(sys.argv[1], encoding="utf-8"))
+          if tree.get("truncated"):
+              raise SystemExit("Git tree response was truncated")
+          prefix = "vendor/oplus/kernel/cpu/"
+          paths = [item["path"] for item in tree["tree"]
+                   if item["type"] == "blob" and item["path"].startswith(prefix)]
+          if not paths or not any(path.endswith("/sched/Kconfig") for path in paths):
+              raise SystemExit("Oplus CPU subtree or sched/Kconfig is missing")
+          with open(sys.argv[2], "w", encoding="utf-8") as out:
+              out.write("\\n".join(paths) + "\\n")
+          print(f"Fetching {len(paths)} Oplus CPU source files from {MODULES_COMMIT}")
+          PY
+          while IFS= read -r path; do
+            mkdir -p "$GITHUB_WORKSPACE/$(dirname "$path")"
+            curl -fsSL \
+              "https://raw.githubusercontent.com/V1NAY007/android_kernel_modules_oplus_mt6895/$MODULES_COMMIT/$path" \
+              -o "$GITHUB_WORKSPACE/$path"
+          done < "$RUNNER_TEMP/cpu-files.txt"
+          test -f "$GITHUB_WORKSPACE/vendor/oplus/kernel/cpu/sched/Kconfig"
+          test -f "$GITHUB_WORKSPACE/kernel/kernel/oplus_cpu/sched/Kconfig"
+          test "$(readlink -f "$GITHUB_WORKSPACE/kernel/kernel/oplus_cpu")" = "$GITHUB_WORKSPACE/vendor/oplus/kernel/cpu"
+          echo "Oplus CPU Kconfig source tree is in place."
 
       - name: Apply and validate GKI kABI patches
         working-directory: kernel
