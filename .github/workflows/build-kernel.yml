@@ -47,8 +47,9 @@ jobs:
           # Therefore the target is $GITHUB_WORKSPACE/../vendor/oplus/kernel/cpu.
           mkdir -p "$GITHUB_WORKSPACE/../vendor/oplus/kernel"
           cp -a modules/vendor/oplus/kernel/cpu "$GITHUB_WORKSPACE/../vendor/oplus/kernel/cpu"
-          test -f kernel/oplus_cpu/sched/Kconfig
-          readlink -f kernel/oplus_cpu
+          test -f kernel/kernel/oplus_cpu/sched/Kconfig
+          readlink -f kernel/kernel/oplus_cpu
+          test "$(readlink -f kernel/kernel/oplus_cpu)" = "$GITHUB_WORKSPACE/vendor/oplus/kernel/cpu"
 
       - name: Apply and validate GKI kABI patches
         working-directory: kernel
